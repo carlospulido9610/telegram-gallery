@@ -17,6 +17,29 @@ function isVideo(url: string) {
   return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
 }
 
+/* ---------- Download helper ---------- */
+function downloadUrl(url: string, filename?: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || url.split('/').pop()?.split('?')[0] || 'download';
+  // For cross-origin URLs, open in new tab as fallback (a.download only works same-origin)
+  if (new URL(url, location.origin).origin !== location.origin) {
+    window.open(url, '_blank');
+  } else {
+    a.click();
+  }
+}
+
+function downloadAll(urls: string[]) {
+  urls.forEach((url, i) => {
+    setTimeout(() => downloadUrl(url), i * 300);
+  });
+}
+
+function getFilename(url: string) {
+  return url.split('/').pop()?.split('?')[0] || 'download';
+}
+
 /* ---------- Video: show first frame as poster via preload="metadata" ---------- */
 function VideoMedia({ url }: { url: string }) {
   const [playing, setPlaying] = useState(false);
@@ -207,34 +230,53 @@ export default function MediaCard({
             {item.sender && <span className="text-xs text-purple-400">@{item.sender}</span>}
           </div>
 
-          {!confirming ? (
+          {/* Action buttons */}
+          <div className="shrink-0 flex items-center gap-1">
+            {/* Download button */}
             <button
-              onClick={() => setConfirming(true)}
-              aria-label="Delete"
-              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-              title="Delete"
+              onClick={() =>
+                isAlbum
+                  ? downloadAll(item.media_urls)
+                  : downloadUrl(item.media_urls[0])
+              }
+              aria-label="Download"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-500/10 transition-colors"
+              title={isAlbum ? `Download all ${item.media_urls.length} files` : 'Download'}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-          ) : (
-            <div className="shrink-0 flex items-center gap-1">
+
+            {!confirming ? (
               <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-2 py-1 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-medium disabled:opacity-50"
+                onClick={() => setConfirming(true)}
+                aria-label="Delete"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                title="Delete"
               >
-                {deleting ? '…' : 'Delete'}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
-              <button
-                onClick={() => setConfirming(false)}
-                className="px-2 py-1 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-2 py-1 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-medium disabled:opacity-50"
+                >
+                  {deleting ? '…' : 'Delete'}
+                </button>
+                <button
+                  onClick={() => setConfirming(false)}
+                  className="px-2 py-1 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {item.texto_limpio && (
