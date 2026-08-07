@@ -17,23 +17,37 @@ function isVideo(url: string) {
   return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
 }
 
-/* ---------- Download helper ---------- */
-function downloadUrl(url: string, filename?: string) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename || url.split('/').pop()?.split('?')[0] || 'download';
-  // For cross-origin URLs, open in new tab as fallback (a.download only works same-origin)
-  if (new URL(url, location.origin).origin !== location.origin) {
+/* ---------- Download helper: real file download via fetch → blob ---------- */
+async function downloadUrl(url: string, filename?: string) {
+  const name = filename || getFilename(url);
+  // For large videos, skip fetch (would load entire file into RAM) — open directly
+  if (isVideo(url)) {
     window.open(url, '_blank');
-  } else {
+    return;
+  }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('fetch failed');
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = name;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+  } catch {
+    // Fallback: open in new tab if fetch fails (CORS, etc.)
+    window.open(url, '_blank');
   }
 }
 
-function downloadAll(urls: string[]) {
-  urls.forEach((url, i) => {
-    setTimeout(() => downloadUrl(url), i * 300);
-  });
+async function downloadAll(urls: string[]) {
+  for (let i = 0; i < urls.length; i++) {
+    await downloadUrl(urls[i]);
+    if (i < urls.length - 1) await new Promise((r) => setTimeout(r, 400));
+  }
 }
 
 function getFilename(url: string) {
@@ -188,6 +202,7 @@ export default function MediaCard({
 
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const handleDelete = async () => {
     if (!supabase) return;
@@ -199,6 +214,19 @@ export default function MediaCard({
     } else {
       alert('Error: ' + error.message);
       setConfirming(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      if (isAlbum) {
+        await downloadAll(item.media_urls);
+      } else {
+        await downloadUrl(item.media_urls[0]);
+      }
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -234,18 +262,21 @@ export default function MediaCard({
           <div className="shrink-0 flex items-center gap-1">
             {/* Download button */}
             <button
-              onClick={() =>
-                isAlbum
-                  ? downloadAll(item.media_urls)
-                  : downloadUrl(item.media_urls[0])
-              }
+              onClick={handleDownload}
+              disabled={downloading}
               aria-label="Download"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-500/10 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-500/10 transition-colors disabled:opacity-50"
               title={isAlbum ? `Download all ${item.media_urls.length} files` : 'Download'}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              {downloading ? (
+                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
             </button>
 
             {!confirming ? (
