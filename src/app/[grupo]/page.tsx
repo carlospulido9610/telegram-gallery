@@ -18,7 +18,7 @@ interface Content {
   created_at: string;
 }
 
-type FilterType = 'todo' | 'fotos' | 'videos' | 'albums';
+type FilterType = 'todo' | 'fotos' | 'videos' | 'albums' | 'duplicados';
 
 const PAGE_SIZE = 24;
 
@@ -31,6 +31,8 @@ export default function GrupoPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<FilterType>('todo');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [dateFilter, setDateFilter] = useState('');
   const [groupName, setGroupName] = useState('');
   const [error, setError] = useState('');
   const [totalCount, setTotalCount] = useState(0);
@@ -79,20 +81,50 @@ export default function GrupoPage() {
     fetchContents();
   }, [grupoSlug]);
 
+  // Fechas únicas disponibles para el filtro por fecha
+  const uniqueDates = useMemo(() => {
+    const dates = Array.from(new Set(allContents.map((c) => (c.fecha || '').slice(0, 10))));
+    return dates.filter(Boolean).sort((a, b) => (a < b ? 1 : -1));
+  }, [allContents]);
+
   const filtered = useMemo(() => {
+    let result: Content[];
     switch (filter) {
       case 'fotos':
-        return allContents.filter(
+        result = allContents.filter(
           (c) => c.tipo === 'foto' || (c.tipo === 'album' && c.media_urls.length > 1)
         );
+        break;
       case 'videos':
-        return allContents.filter((c) => c.tipo === 'video');
+        result = allContents.filter((c) => c.tipo === 'video');
+        break;
       case 'albums':
-        return allContents.filter((c) => c.tipo === 'album' && c.media_urls.length > 1);
+        result = allContents.filter((c) => c.tipo === 'album' && c.media_urls.length > 1);
+        break;
+      case 'duplicados': {
+        // Mismo grupo + mismos archivos = duplicado
+        const seen = new Map<string, number>();
+        for (const c of allContents) {
+          const key = c.media_urls.join('|');
+          seen.set(key, (seen.get(key) || 0) + 1);
+        }
+        result = allContents.filter((c) => (seen.get(c.media_urls.join('|')) || 0) > 1);
+        break;
+      }
       default:
-        return allContents;
+        result = allContents;
     }
-  }, [allContents, filter]);
+
+    if (dateFilter) {
+      result = result.filter((c) => (c.fecha || '').slice(0, 10) === dateFilter);
+    }
+
+    return [...result].sort((a, b) => {
+      const fa = a.fecha || '';
+      const fb = b.fecha || '';
+      return sortOrder === 'desc' ? (fa < fb ? 1 : -1) : (fa > fb ? 1 : -1);
+    });
+  }, [allContents, filter, dateFilter, sortOrder]);
 
   const visible = filtered.slice(0, visibleCount);
 
@@ -105,10 +137,10 @@ export default function GrupoPage() {
     }, 200);
   }, []);
 
-  // Reset visible count when filter changes
+  // Reset visible count when filter/date/order changes
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [filter]);
+  }, [filter, dateFilter, sortOrder]);
 
   if (loading) {
     return (
@@ -138,6 +170,7 @@ export default function GrupoPage() {
     { key: 'fotos', label: 'Fotos' },
     { key: 'videos', label: 'Videos' },
     { key: 'albums', label: 'Albums' },
+    { key: 'duplicados', label: 'Duplicados' },
   ];
 
   return (
@@ -153,7 +186,7 @@ export default function GrupoPage() {
         </p>
       </div>
 
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+      <div className="flex flex-wrap items-center gap-2 mb-6 overflow-x-auto pb-2">
         {filters.map((f) => (
           <button
             key={f.key}
@@ -163,6 +196,47 @@ export default function GrupoPage() {
             {f.label}
           </button>
         ))}
+
+        {/* Filtro por fecha */}
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          aria-label="Filtrar por fecha"
+          className="px-3 py-2 rounded-full text-sm font-medium bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700 cursor-pointer"
+        >
+          <option value="">Todas las fechas</option>
+          {uniqueDates.map((d) => (
+            <option key={d} value={d}>
+              {new Date(d + 'T00:00:00').toLocaleDateString(undefined, {
+                weekday: 'short',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </option>
+          ))}
+        </select>
+
+        {/* Orden: recientes / antiguos */}
+        <button
+          onClick={() => setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
+          className="filter-btn"
+          title="Cambiar orden"
+        >
+          {sortOrder === 'desc' ? '↓ Recientes' : '↑ Antiguos'}
+        </button>
+
+        {(dateFilter || filter !== 'todo') && (
+          <button
+            onClick={() => {
+              setDateFilter('');
+              setFilter('todo');
+            }}
+            className="px-3 py-2 rounded-full text-sm font-medium text-gray-500 hover:text-gray-300"
+          >
+            ✕ Limpiar
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
