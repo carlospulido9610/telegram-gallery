@@ -11,6 +11,9 @@ interface Grupo {
   content_count: number;
 }
 
+// Grupos que piden código numérico para entrar
+const PROTECTED_SLUGS = new Set(['content-of']);
+
 export default function HomePage() {
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,19 +77,25 @@ export default function HomePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {grupos.map((grupo) => (
-          <Link
-            key={grupo.id}
-            href={`/${grupo.slug}`}
-            className="group bg-gray-900 rounded-2xl p-6 hover:bg-gray-800 transition-all hover:scale-[1.02]"
-          >
-            <div className="text-3xl mb-4">{'\uD83D\uDCAC'}</div>
-            <h2 className="text-xl font-semibold text-white mb-2">{grupo.name}</h2>
-            <p className="text-gray-400">
-              {grupo.content_count} {grupo.content_count === 1 ? 'item' : 'items'}
-            </p>
-          </Link>
-        ))}
+        {grupos.map((grupo) => {
+          const protegido = PROTECTED_SLUGS.has(grupo.slug);
+          return (
+            <Link
+              key={grupo.id}
+              href={`/${grupo.slug}`}
+              className="group bg-gray-900 rounded-2xl p-6 hover:bg-gray-800 transition-all hover:scale-[1.02]"
+            >
+              <div className="text-3xl mb-4">{protegido ? '🔒' : '💬'}</div>
+              <h2 className="text-xl font-semibold text-white mb-2">{grupo.name}</h2>
+              <p className="text-gray-400">
+                {grupo.content_count} {grupo.content_count === 1 ? 'item' : 'items'}
+              </p>
+              {protegido && (
+                <p className="text-purple-400 text-xs mt-2">Se necesita código para entrar</p>
+              )}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

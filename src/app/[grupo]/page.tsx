@@ -20,6 +20,10 @@ interface Content {
 
 type FilterType = 'todo' | 'fotos' | 'videos' | 'albums' | 'duplicados';
 
+// Grupos protegidos: se necesita el código numérico para ver el contenido
+const PROTECTED_SLUGS = new Set(['content-of']);
+const ACCESS_CODE = '4522';
+
 const PAGE_SIZE = 24;
 
 export default function GrupoPage() {
@@ -37,7 +41,20 @@ export default function GrupoPage() {
   const [error, setError] = useState('');
   const [totalCount, setTotalCount] = useState(0);
 
+  // Gate de código para grupos protegidos
+  const protegido = PROTECTED_SLUGS.has(grupoSlug);
+  const [codeOk, setCodeOk] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeError, setCodeError] = useState('');
+
   useEffect(() => {
+    if (protegido && typeof window !== 'undefined') {
+      if (sessionStorage.getItem('gallery_code_ok') === '1') setCodeOk(true);
+    }
+  }, [protegido]);
+
+  useEffect(() => {
+    if (protegido && !codeOk) return; // no cargar nada hasta ingresar el código
     if (!supabase) {
       setError('Supabase not configured.');
       setLoading(false);
@@ -79,7 +96,7 @@ export default function GrupoPage() {
       setLoading(false);
     }
     fetchContents();
-  }, [grupoSlug]);
+  }, [grupoSlug, protegido, codeOk]);
 
   // Fechas únicas disponibles para el filtro por fecha
   const uniqueDates = useMemo(() => {
@@ -141,6 +158,50 @@ export default function GrupoPage() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [filter, dateFilter, sortOrder]);
+
+  // Pantalla de código para grupos protegidos
+  if (protegido && !codeOk) {
+    const submitCode = () => {
+      if (codeInput.trim() === ACCESS_CODE) {
+        sessionStorage.setItem('gallery_code_ok', '1');
+        setCodeOk(true);
+        setCodeError('');
+      } else {
+        setCodeError('Código incorrecto');
+      }
+    };
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] px-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 max-w-sm w-full text-center">
+          <div className="text-4xl mb-4">🔒</div>
+          <h1 className="text-2xl font-bold text-white mb-2">Contenido privado</h1>
+          <p className="text-gray-400 text-sm mb-6">
+            Ingresa el código numérico para acceder.
+          </p>
+          <input
+            type="password"
+            inputMode="numeric"
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submitCode()}
+            placeholder="••••"
+            autoFocus
+            className="w-full text-center text-2xl tracking-[0.5em] px-4 py-3 rounded-xl bg-black border border-gray-700 text-white focus:border-purple-500 focus:outline-none mb-3"
+          />
+          {codeError && <p className="text-red-400 text-sm mb-3">{codeError}</p>}
+          <button
+            onClick={submitCode}
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"
+          >
+            Entrar
+          </button>
+          <Link href="/" className="block text-gray-500 hover:text-gray-300 text-sm mt-4">
+            &larr; Volver
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
